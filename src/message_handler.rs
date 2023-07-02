@@ -31,6 +31,12 @@ impl Hash for QueueItem {
 }
 
 #[derive(Debug)]
+pub struct MessageItem {
+    pub id: String,
+    pub data: String,
+}
+
+#[derive(Debug)]
 pub struct MessageHandler {
     pub pq: KeyedPriorityQueue<QueueItem, i32>,
     cfg: Config,
@@ -39,7 +45,7 @@ pub struct MessageHandler {
 impl MessageHandler {
     pub fn new(cfg: Config) -> Arc<tokio::sync::Mutex<MessageHandler>> {
         let pq: KeyedPriorityQueue<QueueItem, i32> = KeyedPriorityQueue::new();
-        let handler = MessageHandler { pq: pq, cfg: cfg };
+        let handler = MessageHandler { pq, cfg };
 
         let handler_arc = Arc::new(Mutex::new(handler));
 
@@ -69,7 +75,7 @@ impl MessageHandler {
 
         let item = QueueItem {
             expiry: Duration::from_secs(self.cfg.message_retention_seconds),
-            id: id,
+            id,
             created_at: Instant::now(),
         };
 
@@ -78,6 +84,23 @@ impl MessageHandler {
         fs::write(format!("messages/{id_clone}.data"), data)?;
 
         Ok(id_clone)
+    }
+
+    pub async fn pull_message(&mut self) -> Result<Option<MessageItem>, io::Error> {
+        match self.pq.pop() {
+            Some(msg) => {
+                let item = msg.0;
+                let item_id = item.id;
+                let file_path = format!("messages/{item_id}.data");
+
+                let data = fs::read_to_string(file_path.clone())?;
+
+                fs::remove_file(file_path)?;
+
+                Ok(Some(MessageItem { data, id: item_id }))
+            }
+            _ => Ok(None),
+        }
     }
 
     async fn remove_expired_messages(&mut self) -> io::Result<()> {

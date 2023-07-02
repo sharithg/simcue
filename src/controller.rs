@@ -1,5 +1,5 @@
 use crate::message_handler::MessageHandler;
-use hyper::{Body, Request, Response};
+use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::error::Error;
@@ -19,25 +19,35 @@ struct EnqueueResponse {
     message_id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct DequeueResponse {
+    message_id: String,
+    data: String,
+}
+
 fn bad_request(m: String) -> Response<Body> {
     Response::builder()
-        .status(400)
-        .body(Body::from(m.clone()))
+        .status(StatusCode::BAD_REQUEST)
+        .body(Body::from(m))
         .unwrap()
 }
 
 fn internal_server_error(m: String) -> Response<Body> {
     Response::builder()
-        .status(500)
-        .body(Body::from(m.clone()))
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body(Body::from(m))
+        .unwrap()
+}
+
+fn no_content() -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::NO_CONTENT)
+        .body(Body::from("".to_string()))
         .unwrap()
 }
 
 fn ok(m: String) -> Response<Body> {
-    Response::builder()
-        .status(200)
-        .body(Body::from(m.clone()))
-        .unwrap()
+    Response::builder().status(200).body(Body::from(m)).unwrap()
 }
 
 async fn get_req<T: for<'de> Deserialize<'de>>(
@@ -83,5 +93,34 @@ pub async fn enqueue_handler(
             };
             Ok(ok(resp_str))
         }
+    }
+}
+
+pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>, Infallible> {
+    let mut heap_inst = heap.lock().await;
+
+    match heap_inst.pull_message().await {
+        Ok(pull_result) => {
+            drop(heap_inst);
+
+            if let Some(item) = pull_result {
+                let resp = DequeueResponse {
+                    message_id: item.id,
+                    data: item.data,
+                };
+                let resp_str = match serde_json::to_string(&resp) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Ok(internal_server_error(
+                            "Error encoding response as json".to_string(),
+                        ))
+                    }
+                };
+                Ok(ok(resp_str))
+            } else {
+                Ok(no_content())
+            }
+        }
+        _ => Ok(internal_server_error("Error reading message".to_string())),
     }
 }

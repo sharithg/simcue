@@ -6,7 +6,7 @@ use std::sync::Arc;
 mod config;
 mod controller;
 mod message_handler;
-use crate::config::get_config;
+use crate::config::Config;
 use message_handler::MessageHandler;
 use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
@@ -22,6 +22,7 @@ struct EnqueueResponse {
 async fn router(req: Request<Body>, heap: SharedHeap) -> Result<Response<Body>, Infallible> {
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/enqueue") => controller::enqueue_handler(req, heap).await,
+        (&Method::GET, "/dequeue") => controller::dequeue_handler(heap).await,
         _ => {
             let mut not_found = Response::default();
             *not_found.status_mut() = StatusCode::NOT_FOUND;
@@ -32,7 +33,7 @@ async fn router(req: Request<Body>, heap: SharedHeap) -> Result<Response<Body>, 
 
 #[tokio::main]
 async fn main() {
-    let cfg = get_config();
+    let cfg = Config::get();
     let queue_handler = MessageHandler::new(cfg);
     SimpleLogger::new().init().unwrap();
 
