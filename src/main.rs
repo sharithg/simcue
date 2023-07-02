@@ -34,7 +34,7 @@ async fn router(req: Request<Body>, heap: SharedHeap) -> Result<Response<Body>, 
 #[tokio::main]
 async fn main() {
     let cfg = Config::get();
-    let queue_handler = MessageHandler::new(cfg);
+    let queue_handler = MessageHandler::new(cfg, "messages".to_string(), true);
     SimpleLogger::new().init().unwrap();
 
     let make_svc = make_service_fn(move |_conn| {

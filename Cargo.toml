@@ -17,3 +17,6 @@ toml = "0.7.5"
 keyed_priority_queue = "0.4.1"
 simple_logger = "4.2.0"
 log = "0.4.19"
+
+[dev-dependencies]
+tempdir = "0.3.7"
