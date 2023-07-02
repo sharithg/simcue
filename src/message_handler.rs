@@ -45,21 +45,17 @@ impl MessageHandler {
 
         let handler_background = Arc::clone(&handler_arc);
 
-        // Spawn a new async task
         task::spawn(async move {
             loop {
-                // Lock the message handler
                 let mut handler = handler_background.lock().await;
 
-                // Remove expired messages
                 handler
                     .remove_expired_messages()
                     .await
-                    .expect("Error removing messages"); // unwrap here is just for simplicity, proper error handling should be done
+                    .expect("Error removing messages");
 
                 drop(handler);
 
-                // Sleep for a certain duration (for example, 1 second)
                 sleep(Duration::from_secs(5)).await;
             }
         });
