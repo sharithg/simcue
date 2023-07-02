@@ -17,7 +17,7 @@ export const options = {
 
 // Simulated user behavior
 export default function () {
-  const url = "http://127.0.0.1:3000/enqueue";
+  const url = "http://127.0.0.1:4433/enqueue";
   const payload = JSON.stringify({
     priority: 1,
     data: "1",
