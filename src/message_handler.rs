@@ -98,11 +98,13 @@ impl MessageHandler {
         for id in ids_to_remove {
             let id_to_remove = id.clone();
 
+            // using dummy values for expiry and created_at since we implemented custom Eq and Hash traits
+            // to cmp by id
             self.pq.remove(&QueueItem {
                 id: id_to_remove.clone(),
                 expiry: Duration::new(0, 0), // dummy value
                 created_at: Instant::now(),  // dummy value
-            }); // assuming QueueItem implements Clone
+            });
 
             fs::remove_file(format!("messages/{}.data", id_to_remove))?; // remove the associated file
         }
