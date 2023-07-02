@@ -9,6 +9,7 @@ mod message_handler;
 use crate::config::get_config;
 use message_handler::MessageHandler;
 use serde::{Deserialize, Serialize};
+use simple_logger::SimpleLogger;
 use tokio::sync::Mutex;
 
 type SharedHeap = Arc<Mutex<MessageHandler>>;
@@ -33,12 +34,27 @@ async fn router(req: Request<Body>, heap: SharedHeap) -> Result<Response<Body>, 
 async fn main() {
     let cfg = get_config();
     let queue_handler = MessageHandler::new(cfg);
+    SimpleLogger::new().init().unwrap();
 
     let make_svc = make_service_fn(move |_conn| {
         let queue_handler = Arc::clone(&queue_handler);
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
-                router(req, Arc::clone(&queue_handler))
+                let uri = req.uri().clone();
+                let method = req.method().clone();
+                let router = router(req, Arc::clone(&queue_handler));
+                async move {
+                    let start = std::time::Instant::now();
+                    let response = router.await;
+                    let duration = std::time::Instant::now() - start;
+                    log::info!(
+                        "method = {}, uri = {}, elapsed = {}μs",
+                        uri.to_string(),
+                        method.as_str(),
+                        duration.as_micros().to_string()
+                    );
+                    response
+                }
             }))
         }
     });
