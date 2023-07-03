@@ -105,33 +105,34 @@ pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>
         Ok(pull_result) => {
             drop(heap_inst);
 
-            if let Some(item) = pull_result {
-                let data: Value = match serde_json::from_str(&item.data) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        log::error!("Error destructuring message data: {e}");
-                        return Ok(internal_server_error(
-                            "Error destructuring message data".to_string(),
-                        ));
-                    }
-                };
+            match pull_result {
+                Some(item) => {
+                    let data: Value = match serde_json::from_str(&item.data) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            log::error!("Error destructuring message data: {e}");
+                            return Ok(internal_server_error(
+                                "Error destructuring message data".to_string(),
+                            ));
+                        }
+                    };
 
-                let resp = DequeueResponse {
-                    message_id: item.id,
-                    data,
-                };
-                let resp_str = match serde_json::to_string(&resp) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return Ok(internal_server_error(
-                            "Error encoding response as json".to_string(),
-                        ))
-                    }
-                };
+                    let resp = DequeueResponse {
+                        message_id: item.id,
+                        data,
+                    };
+                    let resp_str = match serde_json::to_string(&resp) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            return Ok(internal_server_error(
+                                "Error encoding response as json".to_string(),
+                            ))
+                        }
+                    };
 
-                Ok(ok(resp_str))
-            } else {
-                Ok(no_content())
+                    return Ok(ok(resp_str));
+                }
+                None => Ok(no_content()),
             }
         }
         _ => Ok(internal_server_error("Error reading message".to_string())),
