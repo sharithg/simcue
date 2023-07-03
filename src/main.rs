@@ -51,12 +51,16 @@ async fn main() {
 
                     match response.as_ref() {
                         Ok(v) => {
+                            let (elapsed, symb) = if duration.as_micros() > 1000 {
+                                (duration.as_millis(), "ms")
+                            } else {
+                                (duration.as_micros(), "μs")
+                            };
                             log::info!(
-                                "method = {}, status = {}, uri = {}, elapsed = {}μs",
+                                "method = {}, status = {}, uri = {}, elapsed = {elapsed}{symb}",
                                 method.as_str(),
                                 v.status(),
                                 uri.to_string(),
-                                duration.as_micros().to_string()
                             );
                         }
                         Err(_) => {
