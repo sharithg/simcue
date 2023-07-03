@@ -1,6 +1,7 @@
 use crate::message_handler::MessageHandler;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::convert::Infallible;
 use std::error::Error;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ type MessageHandlerMutex = Arc<Mutex<MessageHandler>>;
 #[derive(Serialize, Deserialize)]
 struct EnqueueRequest {
     priority: i32,
-    data: String,
+    data: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -22,7 +23,7 @@ struct EnqueueResponse {
 #[derive(Serialize, Deserialize)]
 struct DequeueResponse {
     message_id: String,
-    data: String,
+    data: Value,
 }
 
 fn bad_request(m: String) -> Response<Body> {
@@ -67,15 +68,16 @@ pub async fn enqueue_handler(
 ) -> Result<Response<Body>, Infallible> {
     let req_body: EnqueueRequest = match get_req(req).await {
         Ok(v) => v,
-        Err(_) => return Ok(bad_request("error reading request body".to_string())),
+        Err(e) => {
+            log::error!("Error destructuring request body: {e}");
+            return Ok(bad_request("error reading request body".to_string()));
+        }
     };
 
     let mut heap_inst = heap.lock().await;
+    let data_string = req_body.data.to_string();
 
-    match heap_inst
-        .push_message(req_body.data, req_body.priority)
-        .await
-    {
+    match heap_inst.push_message(data_string, req_body.priority).await {
         Err(e) => {
             drop(heap_inst);
             Ok(internal_server_error(format!("Error: {}", e)))
@@ -104,9 +106,19 @@ pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>
             drop(heap_inst);
 
             if let Some(item) = pull_result {
+                let data: Value = match serde_json::from_str(&item.data) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        log::error!("Error destructuring message data: {e}");
+                        return Ok(internal_server_error(
+                            "Error destructuring message data".to_string(),
+                        ));
+                    }
+                };
+
                 let resp = DequeueResponse {
                     message_id: item.id,
-                    data: item.data,
+                    data,
                 };
                 let resp_str = match serde_json::to_string(&resp) {
                     Ok(v) => v,
@@ -116,6 +128,7 @@ pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>
                         ))
                     }
                 };
+
                 Ok(ok(resp_str))
             } else {
                 Ok(no_content())
