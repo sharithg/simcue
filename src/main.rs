@@ -48,12 +48,22 @@ async fn main() {
                     let start = std::time::Instant::now();
                     let response = router.await;
                     let duration = std::time::Instant::now() - start;
-                    log::info!(
-                        "method = {}, uri = {}, elapsed = {}μs",
-                        uri.to_string(),
-                        method.as_str(),
-                        duration.as_micros().to_string()
-                    );
+
+                    match response.as_ref() {
+                        Ok(v) => {
+                            log::info!(
+                                "method = {}, status = {}, uri = {}, elapsed = {}μs",
+                                method.as_str(),
+                                v.status(),
+                                uri.to_string(),
+                                duration.as_micros().to_string()
+                            );
+                        }
+                        Err(_) => {
+                            log::error!("Error reading response",);
+                        }
+                    };
+
                     response
                 }
             }))
