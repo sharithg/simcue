@@ -1,30 +1,14 @@
 use crate::message_handler::MessageHandler;
 use hyper::{Body, Request, Response, StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::convert::Infallible;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+mod dto;
 
 type MessageHandlerMutex = Arc<Mutex<MessageHandler>>;
-
-#[derive(Serialize, Deserialize)]
-struct EnqueueRequest {
-    priority: i32,
-    data: Value,
-}
-
-#[derive(Serialize, Deserialize)]
-struct EnqueueResponse {
-    message_id: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct DequeueResponse {
-    message_id: String,
-    data: Value,
-}
 
 fn bad_request(m: String) -> Response<Body> {
     Response::builder()
@@ -66,7 +50,7 @@ pub async fn enqueue_handler(
     req: Request<Body>,
     heap: MessageHandlerMutex,
 ) -> Result<Response<Body>, Infallible> {
-    let req_body: EnqueueRequest = match get_req(req).await {
+    let req_body: dto::EnqueueRequest = match get_req(req).await {
         Ok(v) => v,
         Err(e) => {
             log::error!("Error destructuring request body: {e}");
@@ -88,7 +72,7 @@ pub async fn enqueue_handler(
         }
     };
 
-    let resp = EnqueueResponse { message_id: id };
+    let resp = dto::EnqueueResponse { message_id: id };
     let resp_str = match serde_json::to_string(&resp) {
         Ok(v) => v,
         Err(e) => {
@@ -126,7 +110,7 @@ pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>
         }
     };
 
-    let resp = DequeueResponse {
+    let resp = dto::DequeueResponse {
         message_id: item.id,
         data,
     };
