@@ -76,65 +76,65 @@ pub async fn enqueue_handler(
 
     let mut heap_inst = heap.lock().await;
     let data_string = req_body.data.to_string();
+    let push_result = heap_inst.push_message(data_string, req_body.priority).await;
 
-    match heap_inst.push_message(data_string, req_body.priority).await {
-        Err(e) => {
-            drop(heap_inst);
-            Ok(internal_server_error(format!("Error: {}", e)))
+    drop(heap_inst);
+
+    let id = match push_result {
+        Ok(v) => v,
+        Err(e) => return Ok(internal_server_error(format!("Error: {}", e))),
+    };
+
+    let resp = EnqueueResponse { message_id: id };
+    let resp_str = match serde_json::to_string(&resp) {
+        Ok(v) => v,
+        Err(_) => {
+            return Ok(internal_server_error(
+                "Error encoding response as json".to_string(),
+            ))
         }
-        Ok(id) => {
-            drop(heap_inst);
-            let resp = EnqueueResponse { message_id: id };
-            let resp_str = match serde_json::to_string(&resp) {
-                Ok(v) => v,
-                Err(_) => {
-                    return Ok(internal_server_error(
-                        "Error encoding response as json".to_string(),
-                    ))
-                }
-            };
-            Ok(ok(resp_str))
-        }
-    }
+    };
+
+    Ok(ok(resp_str))
 }
 
 pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>, Infallible> {
     let mut heap_inst = heap.lock().await;
+    let pull_result = match heap_inst.pull_message().await {
+        Ok(result) => result,
+        _ => return Ok(internal_server_error("Error reading message".to_string())),
+    };
 
-    match heap_inst.pull_message().await {
-        Ok(pull_result) => {
-            drop(heap_inst);
+    drop(heap_inst);
 
-            match pull_result {
-                Some(item) => {
-                    let data: Value = match serde_json::from_str(&item.data) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            log::error!("Error destructuring message data: {e}");
-                            return Ok(internal_server_error(
-                                "Error destructuring message data".to_string(),
-                            ));
-                        }
-                    };
+    let item = match pull_result {
+        Some(i) => i,
+        None => return Ok(no_content()),
+    };
 
-                    let resp = DequeueResponse {
-                        message_id: item.id,
-                        data,
-                    };
-                    let resp_str = match serde_json::to_string(&resp) {
-                        Ok(v) => v,
-                        Err(_) => {
-                            return Ok(internal_server_error(
-                                "Error encoding response as json".to_string(),
-                            ))
-                        }
-                    };
-
-                    return Ok(ok(resp_str));
-                }
-                None => Ok(no_content()),
-            }
+    let data: Value = match serde_json::from_str(&item.data) {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Error destructuring message data: {e}");
+            return Ok(internal_server_error(
+                "Error destructuring message data".to_string(),
+            ));
         }
-        _ => Ok(internal_server_error("Error reading message".to_string())),
-    }
+    };
+
+    let resp = DequeueResponse {
+        message_id: item.id,
+        data,
+    };
+
+    let resp_str = match serde_json::to_string(&resp) {
+        Ok(v) => v,
+        Err(_) => {
+            return Ok(internal_server_error(
+                "Error encoding response as json".to_string(),
+            ))
+        }
+    };
+
+    Ok(ok(resp_str))
 }
