@@ -82,16 +82,20 @@ pub async fn enqueue_handler(
 
     let id = match push_result {
         Ok(v) => v,
-        Err(e) => return Ok(internal_server_error(format!("Error: {}", e))),
+        Err(e) => {
+            log::error!("Error pushing message: {e}");
+            return Ok(internal_server_error(format!("Error: {}", e)));
+        }
     };
 
     let resp = EnqueueResponse { message_id: id };
     let resp_str = match serde_json::to_string(&resp) {
         Ok(v) => v,
-        Err(_) => {
+        Err(e) => {
+            log::error!("Error encoding response as json: {e}");
             return Ok(internal_server_error(
                 "Error encoding response as json".to_string(),
-            ))
+            ));
         }
     };
 
@@ -129,10 +133,11 @@ pub async fn dequeue_handler(heap: MessageHandlerMutex) -> Result<Response<Body>
 
     let resp_str = match serde_json::to_string(&resp) {
         Ok(v) => v,
-        Err(_) => {
+        Err(e) => {
+            log::error!("Error encoding response as json: {e}");
             return Ok(internal_server_error(
                 "Error encoding response as json".to_string(),
-            ))
+            ));
         }
     };
 
