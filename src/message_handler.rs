@@ -69,24 +69,26 @@ impl MessageHandler {
 
         let handler_arc = Arc::new(Mutex::new(handler));
 
-        if delete_expired_messages {
-            let handler_background = Arc::clone(&handler_arc);
-
-            task::spawn(async move {
-                loop {
-                    let mut handler = handler_background.lock().await;
-
-                    handler
-                        .remove_expired_messages()
-                        .await
-                        .expect("Error removing messages");
-
-                    drop(handler);
-
-                    sleep(Duration::from_secs(5)).await;
-                }
-            });
+        if !delete_expired_messages {
+            return handler_arc;
         }
+
+        let handler_background = Arc::clone(&handler_arc);
+
+        task::spawn(async move {
+            loop {
+                let mut handler = handler_background.lock().await;
+
+                handler
+                    .remove_expired_messages()
+                    .await
+                    .expect("Error removing messages");
+
+                drop(handler);
+
+                sleep(Duration::from_secs(5)).await;
+            }
+        });
 
         handler_arc
     }
@@ -109,20 +111,20 @@ impl MessageHandler {
     }
 
     pub async fn pull_message(&mut self) -> Result<Option<MessageItem>, io::Error> {
-        match self.pq.pop() {
-            Some(msg) => {
-                let item = msg.0;
-                let item_id = item.id;
-                let file_path = self.get_message_file_path(item_id.clone());
+        let msg = match self.pq.pop() {
+            Some(m) => m,
+            _ => return Ok(None),
+        };
 
-                let data = fs::read_to_string(file_path.clone())?;
+        let item = msg.0;
+        let item_id = item.id;
+        let file_path = self.get_message_file_path(item_id.clone());
 
-                fs::remove_file(file_path)?;
+        let data = fs::read_to_string(file_path.clone())?;
 
-                Ok(Some(MessageItem { data, id: item_id }))
-            }
-            _ => Ok(None),
-        }
+        fs::remove_file(file_path)?;
+
+        Ok(Some(MessageItem { data, id: item_id }))
     }
 
     async fn remove_expired_messages(&mut self) -> io::Result<()> {
