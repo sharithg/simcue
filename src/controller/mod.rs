@@ -1,9 +1,7 @@
 use crate::message_handler::MessageHandler;
 use hyper::{Body, Request, Response, StatusCode};
-use serde::Deserialize;
 use serde_json::Value;
 use std::convert::Infallible;
-use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 mod dto;
@@ -35,25 +33,22 @@ fn ok(m: String) -> Response<Body> {
     Response::builder().status(200).body(Body::from(m)).unwrap()
 }
 
-async fn get_req<T: for<'de> Deserialize<'de>>(
-    req: Request<Body>,
-) -> Result<T, Box<dyn Error + Send + Sync>> {
-    let whole_body = hyper::body::to_bytes(req.into_body()).await?;
-    let item = std::str::from_utf8(&whole_body)?;
-
-    let req_body: T = serde_json::from_str(item)?;
-
-    Ok(req_body)
-}
-
 pub async fn enqueue_handler(
     req: Request<Body>,
     heap: MessageHandlerMutex,
 ) -> Result<Response<Body>, Infallible> {
-    let req_body: dto::EnqueueRequest = match get_req(req).await {
+    let full_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+
+    // 1_048_576 bytes = 1MB
+    if full_body.len() > 1_048_576 {
+        log::error!("Error: data exceeds 1MB limit");
+        return Ok(bad_request("Data exceeds 1MB limit".to_string()));
+    }
+
+    let req_body: dto::EnqueueRequest = match serde_json::from_slice(&full_body) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("Error destructuring request body: {e}");
+            log::error!("Error destructuring request body: {:?}", e);
             return Ok(bad_request("error reading request body".to_string()));
         }
     };

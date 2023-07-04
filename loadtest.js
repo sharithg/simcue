@@ -1,5 +1,6 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { SharedArray } from "k6/data";
 
 // Test configuration
 export const options = {
@@ -15,12 +16,15 @@ export const options = {
   ],
 };
 
+const data = JSON.parse(open("./large.json"));
+
 // Simulated user behavior
 export default function () {
-  const url = "http://127.0.0.1:4433/enqueue";
+  const url_go = "http://0.0.0.0:3333/push";
+  const url_rust = "http://127.0.0.1:4433/enqueue";
   const payload = JSON.stringify({
-    priority: 1,
-    data: "1",
+    priority: Math.floor(Math.random() * 10),
+    data,
   });
 
   const params = {
@@ -29,7 +33,7 @@ export default function () {
     },
   };
 
-  const res = http.post(url, payload, params);
+  const res = http.post(url_rust, payload, params);
   // Validate response status
   check(res, { "status was 200": (r) => r.status == 200 });
   sleep(1);
